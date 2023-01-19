@@ -60,15 +60,18 @@ def get_exif(fn):
         ret[decoded] = value
     return ret
 
-
-# convert pixels to inches
 def px_to_inches(path):    
     im = Image.open(path)
-    width = im.width / 1#im.info['dpi'][0]
-    height = im.height / 1#im.info['dpi'][1]
-    print("Image Info",im.info,"breite",width,"höhe",height)
-
+    width = im.width 
+    height = im.height 
+    #print("Image Info",im.info,"breite",width,"höhe",height)
     return (width, height)
+
+def change_date_format(date):
+    zwi=date.split(" ")
+    datum=zwi[0].split(":")
+    zeit=zwi[1]
+    return datum[2]+"-"+datum[1]+"-"+datum[0]+" "+zeit
 
 # Lösche alte Powerpointdatei, da nicht überschrieben wird
 try:
@@ -204,7 +207,7 @@ for Datei in JPG_Dateien[:]:
             exif_text=exif_text+"  Belichtungszeit: "+str(belichtungszeit_wert)+" s"
             
             if Datum_Statt_Kamera_Daten:
-                run_kamera.text=ausgabe["DateTime"]
+                run_kamera.text=change_date_format(ausgabe["DateTime"])
             else:
                 run_kamera.text=exif_text
 
