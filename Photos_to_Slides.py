@@ -34,20 +34,25 @@ Ordner="Fotoabend2022"
 Mit_UnterOrdner=False
 Datum_Statt_Kamera_Daten=True
 Overview_Slide=False
+neu_konvertieren=True # muss bei erster Ausführung true sein
+karte_ausgeben=True
 fontsize=12
 
+#Korrekte Umrechnung Zeiten
 def belichtungszeit(zeit):
     if zeit<1:
         zeit=int(1/zeit)
         zeit="1/"+str(zeit)
     return zeit
 
+#Minuten und Sekunden addieren
 def gps_converter(North,East):
     North_Dezi=North[0]+North[1]/60.+North[2]/3600.
     East_Dezi = East[0]+ East[1]/60.+ East[2]/3600.
     return North_Dezi,East_Dezi
 
 
+#Exifdaten auslesen
 def get_exif(fn):
     print("Pfad für EXIF: ",fn)
     ret = {}
@@ -60,6 +65,7 @@ def get_exif(fn):
         ret[decoded] = value
     return ret
 
+#Bildgröße berechnen
 def px_to_inches(path):    
     im = Image.open(path)
     width = im.width 
@@ -67,6 +73,7 @@ def px_to_inches(path):
     #print("Image Info",im.info,"breite",width,"höhe",height)
     return (width, height)
 
+#Datumsformat von Exif verbessern
 def change_date_format(date):
     zwi=date.split(" ")
     datum=zwi[0].split(":")
@@ -96,7 +103,7 @@ else:
     #Liste alle Dateien im Ordner aus
     JPG_Dateien=os.listdir(Ordner)
     #JPG_Dateien.sort()
-    print("Alle Dateien im Ordner:",JPG_Dateien)
+    #print("Alle Dateien im Ordner:",JPG_Dateien)
     #auf Macs gibst eine ds_store Datei die vorher gelöscht werden muss
     #JPG_Dateien=[i for i in JPG_Dateien if i[-2:]!="re"] #ds_store Datei rauslöschen
 
@@ -105,20 +112,20 @@ JPG_Dateien=[i for i in JPG_Dateien if i.find("Thumbs.db")<0] #Thumbs.db Datei r
 
 # Konvertiere alle Dateien in JPEG, da es manche Dateien als Format MPO haben, was zu Problemen führt
 
-for image in JPG_Dateien:
-    #nur umwandeln wenn Datei noch nicht exisitert
-    if (Ordner+"/"+image[:]).find("Convert")>-1:
-        print(Ordner+"/"+image[:],"Convert_JPEG Dateien existiern schon")
-    else:
-        im = Image.open(Ordner+"/"+image)
-        im.save(Ordner+"/"+image[:-4] + "_Convert.JPEG", "JPEG")
+if neu_konvertieren:
+    for image in JPG_Dateien:
+        #nur umwandeln wenn Datei noch nicht exisitert
+        if (Ordner+"/"+image[:]).find("Convert")>-1:
+            print(Ordner+"/"+image[:],"Convert_JPEG Dateien existiern schon")
+        else:
+            im = Image.open(Ordner+"/"+image)
+            im.save(Ordner+"/"+image[:-4] + "_Convert.JPEG", "JPEG")
 
 
 
 # nur die Dateien Listen die kein Convert enthalten
 JPG_Dateien=[i for i in JPG_Dateien if i.find("Convert")<0] 
-
-
+JPG_Dateien=sorted(JPG_Dateien, key=lambda item: (int(item.partition('.')[0]) if item[0].isdigit() else float('inf'), item))
 print("Dateien zu Bearbeiten:",JPG_Dateien)
 
 Bild_Nummer=1
@@ -126,10 +133,8 @@ Bild_Nummer=1
 #for Datei in JPG_Dateien[:]:
 blank_slide_layout = prs.slide_layouts[6]
 slide = prs.slides.add_slide(blank_slide_layout)
-slide_size = (25.4, 14.29) # cm
+slide_size = (25.4, 14.29) # in cm. Größe Folien
 prs.slide_width, prs.slide_height = Cm(slide_size[0]), Cm(slide_size[1])
-
-
 
 for Datei in JPG_Dateien[:]:
 
@@ -140,15 +145,7 @@ for Datei in JPG_Dateien[:]:
     pfad_convert=Ordner+"/"+Datei[:-4]+"_Convert.JPEG"
     print("JPEG in Powerpoint",pfad_convert)
 
-
-    #slide_size = (20, 11.25)
-    #slide_size = (16, 9) # Inches?
-
-    #prs.slide_width, prs.slide_height = Inches(slide_size[0]), Inches(slide_size[1])
-
     img = px_to_inches(pfad_convert)
-    #left_calc = Cm(slide_size[0] - img[0]) / 2
-    #print("Left Berechnet",left_calc)
     Bildhoehe=slide_size[1]-2
     Bild_ratio=img[0]/img[1]*Bildhoehe
     Folienmitte=slide_size[0]/2.  
@@ -170,21 +167,15 @@ for Datei in JPG_Dateien[:]:
     p = tf.paragraphs[0]
     run_kamera = p.add_run()
 
-    print(slide.shapes)
-    #slide.shapes.title.
-    #txBox.paragraphs[0].font.size = Pt(4)
-
-    
     top  = Cm(slide_size[1]-1.0) #0.1 oben
     locationBox = slide.shapes.add_textbox(left, top, width, height)
     tf_location = locationBox.text_frame
-    #locationtext.text = ""
     q = tf_location.paragraphs[0]
     run_location = q.add_run()
 
     if Datei[-3:]!="png":
-        if True:
-       # try:
+        #if True:
+        try:
             ausgabe=get_exif(Ordner+"/"+Datei)
             belichtungszeit_wert=belichtungszeit( ausgabe["ExposureTime"]  )
 
@@ -201,7 +192,6 @@ for Datei in JPG_Dateien[:]:
                 # muss hier noch verbessert werden
                 exif_text=exif_text+"  Blende: "+str(round( ausgabe["ApertureValue"]))
                 exif_text=exif_text+"  Blende: "+str(round( ausgabe["MaxApertureValue"]))
-
             except:
                 print("Problem mit Blende")
             exif_text=exif_text+"  Belichtungszeit: "+str(belichtungszeit_wert)+" s"
@@ -210,10 +200,6 @@ for Datei in JPG_Dateien[:]:
                 run_kamera.text=change_date_format(ausgabe["DateTime"])
             else:
                 run_kamera.text=exif_text
-
-
-
-
 
             # Geo Informationen einbauen    
             try: 
@@ -229,7 +215,7 @@ for Datei in JPG_Dateien[:]:
                 print ("Keine GeoDaten")
             Bild_Nummer=Bild_Nummer+1
             print("-----------------------------------")
-        #except:
+        except:
             print("Fehler bei Exifdaten")
             #exif_text=Datei
             print("-----------------------------------")
@@ -268,7 +254,5 @@ if Overview_Slide:
                 index=index+1
             except:
                 print("Keine Bilder mehr für übersicht")
-
-
 
 prs.save('Bilder_Fototron_'+Ordner+'.pptx')
