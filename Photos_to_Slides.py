@@ -25,17 +25,22 @@ import os
 from PIL import Image
 from PIL.ExifTags import TAGS
 from pptx.util import Pt
-
+import time
 from geopy.geocoders import Nominatim
 geoLoc = Nominatim(user_agent="GetLoc")
+
+
+import folium
+from selenium import webdriver # nur notwendig wenn Karten ausgegeben werden sollen
 
 
 Ordner="Fotoabend2022"
 Mit_UnterOrdner=False
 Datum_Statt_Kamera_Daten=True
 Overview_Slide=False
-neu_konvertieren=True # muss bei erster Ausführung true sein
+neu_konvertieren=False # muss bei erster Ausführung true sein
 karte_ausgeben=True
+Karte_Neu_Berechnen=False
 fontsize=12
 
 #Korrekte Umrechnung Zeiten
@@ -54,7 +59,7 @@ def gps_converter(North,East):
 
 #Exifdaten auslesen
 def get_exif(fn):
-    print("Pfad für EXIF: ",fn)
+    #print("Pfad für EXIF: ",fn)
     ret = {}
     i = Image.open(fn)
     info = i._getexif()  
@@ -80,14 +85,49 @@ def change_date_format(date):
     zeit=zwi[1]
     return datum[2]+"-"+datum[1]+"-"+datum[0]+" "+zeit
 
+
+def HTML_TO_PNG(Peak):
+    driver = webdriver.Chrome(executable_path="/Users/stephan/Documents/GitHub/Bilder_zu_PowerPoint/chromedriver") #Path to the Chromedriver
+    #driver = webdriver.Chrome(executable_path="C:\\Users\\Stephan\\OneDrive\\PythonTruhe\\GEO_in_Bild\\chromedriver_96_win") #Path to the Chromedriver
+
+    driver.set_window_size(1000, 1000)  # choose a resolution
+    driver.get("file:///Users/stephan/Documents/GitHub/Bilder_zu_PowerPoint/maps_html/" + Peak +".html") #Where to find HTML
+    #driver.get("file:C:\\Users\\Stephan\\OneDrive\\PythonTruhe\\GEO_in_Bild\\maps_html\\" + Peak +".html") #Where to find HTML
+
+    time.sleep(2) # Waiting time for page loading
+    driver.save_screenshot("maps_png/"+Peak+"_largemap.png")    # Save Screenshot of HTML     
+    driver.quit() #close Chrome
+
+
+
+def zeichne_karte(North_Dezi,East_Dezi,name,start_ausschnitt=0.0025):
+    karte_folium= folium.Map( zoom_start=10,scrollWheelzoom=True,zoom_control=True) 
+
+
+    folium.Marker((North_Dezi,East_Dezi),icon=folium.DivIcon(icon_size=("auto",20), icon_anchor=(13,13),html=f"""
+                <div>
+                <svg width="26" height="26">
+                <circle cx="13" cy="13" r="13" fill="blue" />
+                </svg>
+                </div>""")).add_to(karte_folium)
+
+    lon_min=(East_Dezi)-start_ausschnitt # left/east
+    lon_max=(East_Dezi)+start_ausschnitt # right/west
+    lat_min=(North_Dezi)-start_ausschnitt # up/north
+    lat_max=(North_Dezi)+start_ausschnitt # down/south
+    
+    karte_folium.fit_bounds([(lat_min,lon_min),(lat_max,lon_max)])    
+
+    karte_folium.save("maps_html/"+name+".html")
+
+
+
+
 # Lösche alte Powerpointdatei, da nicht überschrieben wird
 try:
     os.remove('Bilder_Fototron'+Ordner+'.pptx')
 except:
     print("Keine Datei zum Löschen")
-
-prs = Presentation()
-
 
 
 if Mit_UnterOrdner:
@@ -129,15 +169,15 @@ JPG_Dateien=sorted(JPG_Dateien, key=lambda item: (int(item.partition('.')[0]) if
 print("Dateien zu Bearbeiten:",JPG_Dateien)
 
 Bild_Nummer=1
-
+prs = Presentation()
 #for Datei in JPG_Dateien[:]:
 blank_slide_layout = prs.slide_layouts[6]
 slide = prs.slides.add_slide(blank_slide_layout)
 slide_size = (25.4, 14.29) # in cm. Größe Folien
 prs.slide_width, prs.slide_height = Cm(slide_size[0]), Cm(slide_size[1])
 
-for Datei in JPG_Dateien[:]:
-
+for index,Datei in enumerate(JPG_Dateien[:]):
+    print("Index",index)
     blank_slide_layout = prs.slide_layouts[6]
     print("Datei",Datei)
     slide = prs.slides.add_slide(blank_slide_layout)
@@ -179,7 +219,7 @@ for Datei in JPG_Dateien[:]:
             ausgabe=get_exif(Ordner+"/"+Datei)
             belichtungszeit_wert=belichtungszeit( ausgabe["ExposureTime"]  )
 
-            print("Ausgabe",ausgabe)
+            #print("Ausgabe",ausgabe)
             print("Brennweite",ausgabe["FocalLength"])
             print("ISO",ausgabe["ISOSpeedRatings"])
             #print("FNumber/Blende",ausgabe["FNumber"],round( ausgabe["FNumber"][0]/ausgabe["FNumber"][1],1))
@@ -202,7 +242,8 @@ for Datei in JPG_Dateien[:]:
                 run_kamera.text=exif_text
 
             # Geo Informationen einbauen    
-            try: 
+            #try: 
+            if True:
                 North_Dezi,East_Dezi=gps_converter(ausgabe["GPSInfo"][2],ausgabe["GPSInfo"][4])
                 
                 # passing the coordinates
@@ -211,7 +252,12 @@ for Datei in JPG_Dateien[:]:
                 # printing the address/location name
                 print(locname.address)
                 run_location.text=locname.address
-            except:
+                if Karte_Neu_Berechnen:
+                    zeichne_karte(North_Dezi,East_Dezi,str(index))
+                    HTML_TO_PNG(str(index))
+                pic_map = slide.shapes.add_picture("maps_png/"+str(index)+"_largemap.png", Cm(10), Cm(5), height= Cm(3)) #Maße der Bilder
+
+            #except:
                 print ("Keine GeoDaten")
             Bild_Nummer=Bild_Nummer+1
             print("-----------------------------------")
