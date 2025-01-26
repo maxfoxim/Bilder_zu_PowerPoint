@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """
 Created on Tue Jul  9 15:19:09 2019
-
 Letzte Änderungen
 27.11.19: Belichtungszeit richtig angeben
 28.11.19: Convert Problem, Index von 5 auf 4 gesetzt
@@ -9,11 +8,16 @@ Letzte Änderungen
 10.11.20 Anscheinend neue EXIF Formatierung.
 24.1.21 kleiner Bugfix
 17.1.23 Datum statt Kameradaten; Ortsinformationen
-"""
+26.1.25 Farbiger Hintergrund / Durchschnittsfarbe
 
-"""
 Hilfreiche Links:
 https://www.shibutan-bloomers.com/python-libraly-pptx-2_en/6310/
+
+Chrome Webdriver:
+https://googlechromelabs.github.io/chrome-for-testing/#stable
+
+Karternmaterial 
+https://leaflet-extras.github.io/leaflet-providers/preview/
 """
 
 
@@ -21,6 +25,7 @@ https://www.shibutan-bloomers.com/python-libraly-pptx-2_en/6310/
 
 from pptx import Presentation
 from pptx.util import Inches,Cm
+from pptx.dml.color import RGBColor
 import os
 from PIL import Image
 from PIL.ExifTags import TAGS
@@ -28,20 +33,22 @@ from pptx.util import Pt
 import time
 from geopy.geocoders import Nominatim
 geoLoc = Nominatim(user_agent="GetLoc")
-
-
+import cv2, numpy as np
+from sklearn.cluster import KMeans
 import folium
 from selenium import webdriver # nur notwendig wenn Karten ausgegeben werden sollen
 
 
-Ordner="Fotoabend2022"
+Ordner="Fotoabend2024"#"Fotoabend2024"
 Mit_UnterOrdner=False
-Datum_Statt_Kamera_Daten=True
+Datum_Statt_Kamera_Daten=True # Datum in richtige Form bringen
 Overview_Slide=False
-neu_konvertieren=False # muss bei erster Ausführung true sein
+neu_konvertieren=True # muss bei erster Ausführung true sein
 karte_ausgeben=True
-Karte_Neu_Berechnen=False
+Karte_Neu_Berechnen=True
+GeoInfos_Einbauen=True
 fontsize=12
+
 
 #Korrekte Umrechnung Zeiten
 def belichtungszeit(zeit):
@@ -87,9 +94,7 @@ def change_date_format(date):
 
 
 def HTML_TO_PNG(Peak):
-    driver = webdriver.Chrome(executable_path="/Users/stephan/Documents/GitHub/Bilder_zu_PowerPoint/chromedriver") #Path to the Chromedriver
-    #driver = webdriver.Chrome(executable_path="C:\\Users\\Stephan\\OneDrive\\PythonTruhe\\GEO_in_Bild\\chromedriver_96_win") #Path to the Chromedriver
-
+    driver = webdriver.Chrome()
     driver.set_window_size(1000, 1000)  # choose a resolution
     driver.get("file:///Users/stephan/Documents/GitHub/Bilder_zu_PowerPoint/maps_html/" + Peak +".html") #Where to find HTML
     #driver.get("file:C:\\Users\\Stephan\\OneDrive\\PythonTruhe\\GEO_in_Bild\\maps_html\\" + Peak +".html") #Where to find HTML
@@ -98,29 +103,47 @@ def HTML_TO_PNG(Peak):
     driver.save_screenshot("maps_png/"+Peak+"_largemap.png")    # Save Screenshot of HTML     
     driver.quit() #close Chrome
 
+def visualize_colors(n_clusters, Pfad):
+    # https://stackoverflow.com/questions/43111029/how-to-find-the-average-colour-of-an-image-in-python-with-opencv
+    # Get the number of different clusters, create histogram, and normalize
+    image = cv2.imread(Pfad)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    reshape = image.reshape((image.shape[0] * image.shape[1], 3))
+    #print("reshape",reshape)
+    # Find and display most dominant colors
+    cluster = KMeans(n_clusters).fit(reshape)
+    
+    labels = np.arange(0, len(np.unique(cluster.labels_)) + 1)
+    (hist, _) = np.histogram(cluster.labels_, bins = labels)
+    hist = hist.astype("float")
+    hist /= hist.sum()
+    # Create frequency rect and iterate through each cluster's color and percentage
+    rect = np.zeros((50, 300, 3), dtype=np.uint8)
+    colors = sorted([(percent, color) for (percent, color) in zip(hist,cluster.cluster_centers_)])
+    start = 0
+    for (percent, color) in colors:
+        print(color, "{:0.2f}%".format(percent * 100))
+        end = start + (percent * 300)
+        cv2.rectangle(rect, (int(start), 0), (int(end), 50), \
+                      color.astype("uint8").tolist(), -1)
+        start = end
+    return rect, colors
 
 
 def zeichne_karte(North_Dezi,East_Dezi,name,start_ausschnitt=0.0025):
-    karte_folium= folium.Map( zoom_start=10,scrollWheelzoom=True,zoom_control=True) 
-
-
+    karte_folium= folium.Map( zoom_start=10, scrollWheelzoom=True, zoom_control=True,  tiles="CartoDB.Positron") 
     folium.Marker((North_Dezi,East_Dezi),icon=folium.DivIcon(icon_size=("auto",20), icon_anchor=(13,13),html=f"""
                 <div>
                 <svg width="26" height="26">
                 <circle cx="13" cy="13" r="13" fill="blue" />
                 </svg>
                 </div>""")).add_to(karte_folium)
-
     lon_min=(East_Dezi)-start_ausschnitt # left/east
     lon_max=(East_Dezi)+start_ausschnitt # right/west
     lat_min=(North_Dezi)-start_ausschnitt # up/north
     lat_max=(North_Dezi)+start_ausschnitt # down/south
-    
     karte_folium.fit_bounds([(lat_min,lon_min),(lat_max,lon_max)])    
-
     karte_folium.save("maps_html/"+name+".html")
-
-
 
 
 # Lösche alte Powerpointdatei, da nicht überschrieben wird
@@ -147,11 +170,12 @@ else:
     #auf Macs gibst eine ds_store Datei die vorher gelöscht werden muss
     #JPG_Dateien=[i for i in JPG_Dateien if i[-2:]!="re"] #ds_store Datei rauslöschen
 
+print("Entferne überflüssige Dateien.")
 JPG_Dateien=[i for i in JPG_Dateien if i.find("DS_Store")<0] #ds_store Datei rauslöschen
 JPG_Dateien=[i for i in JPG_Dateien if i.find("Thumbs.db")<0] #Thumbs.db Datei rauslöschen
+JPG_Dateien=[i for i in JPG_Dateien if i.find(".MOV")<0] #Thumbs.db Datei rauslöschen
 
 # Konvertiere alle Dateien in JPEG, da es manche Dateien als Format MPO haben, was zu Problemen führt
-
 if neu_konvertieren:
     for image in JPG_Dateien:
         #nur umwandeln wenn Datei noch nicht exisitert
@@ -159,24 +183,23 @@ if neu_konvertieren:
             print(Ordner+"/"+image[:],"Convert_JPEG Dateien existiern schon")
         else:
             im = Image.open(Ordner+"/"+image)
-            im.save(Ordner+"/"+image[:-4] + "_Convert.JPEG", "JPEG")
-
+            icc_profile = im.info.get('icc_profile')
+            im.save(Ordner+"/"+image[:-4] + "_Convert.JPEG", "JPEG",icc_profile=icc_profile)
 
 
 # nur die Dateien Listen die kein Convert enthalten
 JPG_Dateien=[i for i in JPG_Dateien if i.find("Convert")<0] 
-JPG_Dateien=sorted(JPG_Dateien, key=lambda item: (int(item.partition('.')[0]) if item[0].isdigit() else float('inf'), item))
+#JPG_Dateien=sorted(JPG_Dateien, key=lambda item: (int(item.partition('.')[0]) if item[0].isdigit() else float('inf'), item))
 print("Dateien zu Bearbeiten:",JPG_Dateien)
 
 Bild_Nummer=1
 prs = Presentation()
-#for Datei in JPG_Dateien[:]:
 blank_slide_layout = prs.slide_layouts[6]
 slide = prs.slides.add_slide(blank_slide_layout)
-slide_size = (25.4, 14.29) # in cm. Größe Folien
+slide_size = (33.867 , 19.05) # in cm. Größe Folien
 prs.slide_width, prs.slide_height = Cm(slide_size[0]), Cm(slide_size[1])
 
-for index,Datei in enumerate(JPG_Dateien[:]):
+for index,Datei in enumerate(JPG_Dateien[0:5]):
     print("Index",index)
     blank_slide_layout = prs.slide_layouts[6]
     print("Datei",Datei)
@@ -185,6 +208,7 @@ for index,Datei in enumerate(JPG_Dateien[:]):
     pfad_convert=Ordner+"/"+Datei[:-4]+"_Convert.JPEG"
     print("JPEG in Powerpoint",pfad_convert)
 
+    # Bild hinzufügen
     img = px_to_inches(pfad_convert)
     Bildhoehe=slide_size[1]-2
     Bild_ratio=img[0]/img[1]*Bildhoehe
@@ -193,7 +217,18 @@ for index,Datei in enumerate(JPG_Dateien[:]):
     print("left",left,"Folienmitte",Folienmitte,"Bild_Ratio",Bild_ratio)
     pic = slide.shapes.add_picture(pfad_convert, Cm(left), top, height= Cm(Bildhoehe)) #Maße der Bilder
  
-    
+ 
+ 
+    #Durchschnittsfarbe bestimmen und als Hintergrund setzen:
+    visualize,colors = visualize_colors(5,pfad_convert)
+    visualize = cv2.cvtColor(visualize, cv2.COLOR_RGB2BGR)
+    #print(colors)
+    #cv2.imshow('visualize', visualize)
+    cv2.imwrite("Farbspekten_Bilder/"+str(index)+"_farben.jpeg", visualize)
+    background = slide.background
+    fill = background.fill
+    fill.solid()
+    fill.fore_color.rgb = RGBColor(int(colors[-1][1][0]), int(colors[-1][1][1]), int(colors[-1][1][2]))
 
     
     #Platzierung der EXIF-Daten
@@ -241,36 +276,35 @@ for index,Datei in enumerate(JPG_Dateien[:]):
             else:
                 run_kamera.text=exif_text
 
-            # Geo Informationen einbauen    
-            #try: 
-            if True:
+        except Exception as fehler:
+            print("Fehler bei EXIF Daten",fehler)
+            
+
+        # Geo Informationen einbauen    
+        try: 
+            if GeoInfos_Einbauen:
                 North_Dezi,East_Dezi=gps_converter(ausgabe["GPSInfo"][2],ausgabe["GPSInfo"][4])
                 
                 # passing the coordinates
                 locname = geoLoc.reverse(f"{North_Dezi}, {East_Dezi}")
 
                 # printing the address/location name
-                print(locname.address)
+                print("locname.address",locname.address)
                 run_location.text=locname.address
                 if Karte_Neu_Berechnen:
                     zeichne_karte(North_Dezi,East_Dezi,str(index))
                     HTML_TO_PNG(str(index))
-                pic_map = slide.shapes.add_picture("maps_png/"+str(index)+"_largemap.png", Cm(10), Cm(5), height= Cm(3)) #Maße der Bilder
-
-            #except:
-                print ("Keine GeoDaten")
+                pic_map = slide.shapes.add_picture("maps_png/"+str(index)+"_largemap.png", Cm(27.8), Cm(13.82), height= Cm(5)) #Maße der Bilder
             Bild_Nummer=Bild_Nummer+1
             print("-----------------------------------")
-        except:
-            print("Fehler bei Exifdaten")
+        except Exception as fehler:
+            print("Fehler bei Exifdaten:",fehler)
             #exif_text=Datei
             print("-----------------------------------")
-
 
     font = run_kamera.font
     font.name = 'Calibri'
     font.size = Pt(fontsize)
-
     font = run_location.font
     font.name = 'Calibri'
     font.size = Pt(fontsize)
@@ -284,7 +318,6 @@ if Overview_Slide:
     blank_slide_layout = prs.slide_layouts[6]
     print("Datei",Datei)
     slide = prs.slides.add_slide(blank_slide_layout)
-
     index=0
     for hoehe in range(4):
         for laenge in range(5):
@@ -292,7 +325,6 @@ if Overview_Slide:
                 left = top = right = bottom = Inches(0.5) # Platzierung der Bilder
                 left = Inches(0.5)+Inches(laenge*2)
                 top =  Inches(0.5)+Inches(hoehe*2)
-        
                 pfad_convert=Ordner+"/"+JPG_Dateien[index][:-4]+"_Convert.JPEG"
                 print("JPEG in Powerpoint Mehrfachplot",pfad_convert)
                 pic = slide.shapes.add_picture(pfad_convert, left, top, height= Inches(1.5)) #Maße der Bilder
@@ -300,5 +332,7 @@ if Overview_Slide:
                 index=index+1
             except:
                 print("Keine Bilder mehr für übersicht")
+
+
 
 prs.save('Bilder_Fototron_'+Ordner+'.pptx')
