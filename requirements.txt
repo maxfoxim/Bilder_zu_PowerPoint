@@ -1,0 +1,7 @@
+python-pptx
+pillow
+folium
+selenium
+scikit-learn
+opencv-python
+geopy

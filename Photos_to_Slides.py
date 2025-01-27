@@ -10,7 +10,15 @@ Letzte Änderungen
 17.1.23 Datum statt Kameradaten; Ortsinformationen
 26.1.25 Farbiger Hintergrund / Durchschnittsfarbe
 
+TO DO:
+- schwarze Schrift Datums/Ort passend zu Hintergrund
+- Ambient Effekt ?
+
+
+
 Hilfreiche Links:
+
+
 https://www.shibutan-bloomers.com/python-libraly-pptx-2_en/6310/
 
 Chrome Webdriver:
@@ -22,15 +30,15 @@ https://leaflet-extras.github.io/leaflet-providers/preview/
 
 
 # fuer pptx und exifread: pip install python-pptx und pip install exifread
+import os
+import time
 
 from pptx import Presentation
 from pptx.util import Inches,Cm
 from pptx.dml.color import RGBColor
-import os
 from PIL import Image
 from PIL.ExifTags import TAGS
 from pptx.util import Pt
-import time
 from geopy.geocoders import Nominatim
 geoLoc = Nominatim(user_agent="GetLoc")
 import cv2, numpy as np
@@ -39,7 +47,7 @@ import folium
 from selenium import webdriver # nur notwendig wenn Karten ausgegeben werden sollen
 
 
-Ordner="Fotoabend2024"#"Fotoabend2024"
+Ordner="Fotoabend2024"  # Folder containing all photos
 Mit_UnterOrdner=False
 Datum_Statt_Kamera_Daten=True # Datum in richtige Form bringen
 Overview_Slide=False
@@ -144,6 +152,17 @@ def zeichne_karte(North_Dezi,East_Dezi,name,start_ausschnitt=0.0025):
     lat_max=(North_Dezi)+start_ausschnitt # down/south
     karte_folium.fit_bounds([(lat_min,lon_min),(lat_max,lon_max)])    
     karte_folium.save("maps_html/"+name+".html")
+
+
+# Erstelle benötigte Ordner:
+if os.path.isdir('maps_html')==False:
+    os.mkdir()
+
+if os.path.isdir('maps_png')==False:
+    os.mkdir()
+    
+if os.path.isdir('Farbspekten_Bilder')==False:
+    os.mkdir()
 
 
 # Lösche alte Powerpointdatei, da nicht überschrieben wird
@@ -335,4 +354,4 @@ if Overview_Slide:
 
 
 
-prs.save('Bilder_Fototron_'+Ordner+'.pptx')
+prs.save('Prensentation_'+Ordner+'.pptx')

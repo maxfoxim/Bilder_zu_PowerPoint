@@ -1,11 +1,13 @@
 # Photos to Powerpoint
-Creates a PowerPoint presentation of photos in addtion to some meta data like ISO, exposure or aperture.
+Creates a PowerPoint presentation of photos in addtion to some meta data like 
+- ISO, exposure or aperture.
+- Datetime when photo was taken
+- Position data (city, land, state etc)
 
 
-# Packages
-You need the following modules: 
+# Installation
+pip install -r requirements.txt
 
-pptx: pip install python-pptx
-PIL: pip install exifread
-
-Create a folder in the same folder like the python script. Here you insert all photos which you want to see on the slides.
+# Example
+Example for one slide.
+![image](Example_Slide.png)
